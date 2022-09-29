@@ -1,40 +1,8 @@
 #import "SponsorBlockSettingsController.h"
-#import "colorFunctions.h"
 
 static NSString *LogoSponsorBlockerPath;
 
 @implementation SponsorBlockTableCell
--(void)colorPicker:(id)colorPicker didSelectColor:(UIColor *)color {
-    self.colorWell.color = color;
-    NSString *hexString = hexFromUIColor(color);
-    
-    NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-    NSString *documentsDirectory = [paths objectAtIndex:0];
-    NSString *settingsPath = [documentsDirectory stringByAppendingPathComponent:@"iSponsorBlock.plist"];
-    NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-    [settings addEntriesFromDictionary:[NSDictionary dictionaryWithContentsOfFile:settingsPath]];
-    NSDictionary *categorySettings = [settings objectForKey:@"categorySettings"];
-    
-    [categorySettings setValue:hexString forKey:[NSString stringWithFormat:@"%@Color", self.category]];
-    [settings setValue:categorySettings forKey:@"categorySettings"];
-    [settings writeToURL:[NSURL fileURLWithPath:settingsPath isDirectory:NO] error:nil];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.galacticdev.isponsorblockprefs.changed"), NULL, NULL, YES);
-}
--(void)presentColorPicker:(UITableViewCell *)sender {
-    HBColorPickerViewController *viewController = [[objc_getClass("HBColorPickerViewController") alloc] init];
-    viewController.delegate = self;
-    viewController.popoverPresentationController.sourceView = self;
-
-    HBColorPickerConfiguration *configuration = [[objc_getClass("HBColorPickerConfiguration") alloc] initWithColor:self.colorWell.color];
-    configuration.supportsAlpha = NO;
-    viewController.configuration = configuration;
-
-    UIViewController *rootViewController = self._viewControllerForAncestor;
-    [rootViewController presentViewController:viewController animated:YES completion:nil];
-    
-    //fixes the bottom of the color picker from getting cut off
-    viewController.view.frame = CGRectMake(0,-50, viewController.view.frame.size.width, viewController.view.frame.size.height);
-}
 @end
 
 @implementation SponsorBlockSettingsController
@@ -175,13 +143,6 @@ static NSString *LogoSponsorBlockerPath;
         else {
             tableCell.textLabel.text = @"Set Color To Show in Seek Bar";
             tableCell.textLabel.adjustsFontSizeToFitWidth = YES;
-            HBColorWell *colorWell = [[objc_getClass("HBColorWell") alloc] initWithFrame:CGRectMake(0,0,32,32)];
-            [colorWell addTarget:tableCell action:@selector(presentColorPicker:) forControlEvents:UIControlEventTouchUpInside];
-            [colorWell addTarget:tableCell action:@selector(colorWellValueChanged:) forControlEvents:UIControlEventValueChanged];
-            UIColor *color = colorWithHexString([categorySettings objectForKey:[NSString stringWithFormat:@"%@Color", tableCell.category]]);
-            colorWell.color = color;
-            tableCell.accessoryView = colorWell;
-            tableCell.colorWell = colorWell;
         }
         return tableCell;
     }
