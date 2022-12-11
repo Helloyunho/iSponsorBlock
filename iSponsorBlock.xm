@@ -219,39 +219,43 @@ NSString *modifiedTimeString;
 %end
 
 %hook YTMainAppControlsOverlayView
-%property (strong, nonatomic) YTQTMButton *sponsorBlockButton;
-%property (strong, nonatomic) YTQTMButton *sponsorStartedEndedButton;
-%property (strong, nonatomic) YTPlayerViewController *playerViewController;
+%property (retain, nonatomic) YTQTMButton *sponsorBlockButton;
+%property (retain, nonatomic) YTQTMButton *sponsorStartedEndedButton;
+%property (retain, nonatomic) YTPlayerViewController *playerViewController;
 %property (nonatomic, assign) BOOL isDisplayingSponsorBlockViewController;
+-(id)initWithDelegate:(id)delegate {
+    self = %orig;
+    if (kShowButtonsInPlayer) {
+        self.sponsorBlockButton = [%c(YTQTMButton) iconButton];
+        // self.sponsorBlockButton.frame = CGRectMake(0, 0, 24, 36);
+        [self.sponsorBlockButton setImage:[UIImage imageWithContentsOfFile:@"/var/mobile/Library/Application Support/iSponsorBlock/PlayerInfoIconSponsorBlocker256px-20@2x.png"] forState:UIControlStateNormal];
+        
+        self.sponsorStartedEndedButton = [%c(YTQTMButton) iconButton];
+        // self.sponsorStartedEndedButton.frame = CGRectMake(0,0,24,36);
+        if (self.playerViewController.userSkipSegments.lastObject.endTime != -1) [self.sponsorStartedEndedButton setImage:[UIImage imageWithContentsOfFile:@"/var/mobile/Library/Application Support/iSponsorBlock/sponsorblockstart-20@2x.png"] forState:UIControlStateNormal];
+        else [self.sponsorStartedEndedButton setImage:[UIImage imageWithContentsOfFile:@"/var/mobile/Library/Application Support/iSponsorBlock/sponsorblockend-20@2x.png"] forState:UIControlStateNormal];
+
+        [self.sponsorBlockButton addTarget:self action:@selector(sponsorBlockButtonPressed:) forControlEvents:UIControlEventTouchUpInside];
+        [self.sponsorStartedEndedButton addTarget:self action:@selector(sponsorStartedEndedButtonPressed:) forControlEvents:UIControlEventTouchUpInside];
+
+        @try {
+            UIView *containerView = [self valueForKey:@"_topControlsAccessibilityContainerView"];
+            [containerView addSubview:self.sponsorBlockButton];
+            [containerView addSubview:self.sponsorStartedEndedButton];
+        } @catch (id ex) {
+            [self addSubview:self.sponsorBlockButton];
+            [self addSubview:self.sponsorStartedEndedButton];
+        }
+    }
+    return self;
+}
+
+
 -(NSMutableArray *)topControls {
     NSMutableArray <UIView *> *topControls = %orig;
-    if(![topControls containsObject:self.sponsorBlockButton] && kShowButtonsInPlayer) {
-        if(!self.sponsorBlockButton) {
-            self.sponsorBlockButton = [%c(YTQTMButton) iconButton];
-            self.sponsorBlockButton.frame = CGRectMake(0, 0, 24, 36);
-            [self.sponsorBlockButton setImage:[UIImage imageWithContentsOfFile:PlayerInfoIconSponsorBlockerPath] forState:UIControlStateNormal];            
-            
-            self.sponsorStartedEndedButton = [%c(YTQTMButton) iconButton];
-            self.sponsorStartedEndedButton.frame = CGRectMake(0,0,24,36);
-            if(self.playerViewController.userSkipSegments.lastObject.endTime != -1) [self.sponsorStartedEndedButton setImage:[UIImage imageWithContentsOfFile:SponsorblockstartPath] forState:UIControlStateNormal];
-            else [self.sponsorStartedEndedButton setImage:[UIImage imageWithContentsOfFile:SponsorblockendPath] forState:UIControlStateNormal];
-
-            if(topControls[0].superview == self) {
-                [self addSubview:self.sponsorBlockButton];
-                [self addSubview:self.sponsorStartedEndedButton];
-            } else {
-                UIView *containerView = [self valueForKey:@"_topControlsAccessibilityContainerView"];
-                [containerView addSubview:self.sponsorBlockButton];
-                [containerView addSubview:self.sponsorStartedEndedButton];
-            }
-
-            [self.sponsorBlockButton addTarget:self action:@selector(sponsorBlockButtonPressed:) forControlEvents:UIControlEventTouchUpInside];
-            [self.sponsorStartedEndedButton addTarget:self action:@selector(sponsorStartedEndedButtonPressed:) forControlEvents:UIControlEventTouchUpInside];
-        }
-        
+    if (kShowButtonsInPlayer) {
         [topControls insertObject:self.sponsorBlockButton atIndex:0];
         [topControls insertObject:self.sponsorStartedEndedButton atIndex:0];
-        return topControls;
     }
     return %orig;
 }
@@ -383,6 +387,10 @@ NSString *modifiedTimeString;
         return;
     }
     self.sponsorMarkerViews = [NSMutableArray array];
+    UIView *scrubber = [self valueForKey:@"_scrubberCircle"];
+    UIView *referenceView = [[self valueForKey:@"_segmentViews"] firstObject];
+    if (referenceView == nil) return;
+    CGFloat originY = referenceView.frame.origin.y;
     for(SponsorSegment *segment in arg1) {
         CGFloat startTime = segment.startTime;
         CGFloat endTime = segment.endTime;
@@ -390,7 +398,7 @@ NSString *modifiedTimeString;
         CGFloat endX = (endTime * self.frame.size.width) / self.totalTime;
         CGFloat markerWidth;
         if(endX >= beginX) markerWidth = endX - beginX;
-            else markerWidth = 0;
+        else markerWidth = 0;
         
         UIColor *color;
         if([segment.category isEqualToString:@"sponsor"]) color = colorWithHexString([kCategorySettings objectForKey:@"sponsorColor"]);
@@ -399,18 +407,13 @@ NSString *modifiedTimeString;
         else if([segment.category isEqualToString:@"interaction"]) color = colorWithHexString([kCategorySettings objectForKey:@"interactionColor"]);
         else if([segment.category isEqualToString:@"selfpromo"]) color = colorWithHexString([kCategorySettings objectForKey:@"selfpromoColor"]);
         else if([segment.category isEqualToString:@"music_offtopic"]) color = colorWithHexString([kCategorySettings objectForKey:@"music_offtopicColor"]);
-        UIView *newMarkerView = [[UIView alloc] initWithFrame:CGRectZero];
-        newMarkerView.backgroundColor = color;
-        [self addSubview:newMarkerView];
-        newMarkerView.translatesAutoresizingMaskIntoConstraints = NO;
         if(isnan(markerWidth) || !isfinite(beginX)) {
             return;
         }
-        [newMarkerView.widthAnchor constraintEqualToConstant:markerWidth].active = YES;
-        [newMarkerView.heightAnchor constraintEqualToConstant:2].active = YES;
-        [newMarkerView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:beginX].active = YES;
-        [newMarkerView.topAnchor constraintEqualToAnchor:self.topAnchor constant:[[self valueForKey:@"_segmentViews"][0] frame].origin.y].active = YES;
-
+        UIView *newMarkerView = [[UIView alloc] initWithFrame:CGRectMake(beginX, originY, endX - beginX, 2)];
+        newMarkerView.userInteractionEnabled = NO;
+        newMarkerView.backgroundColor = color;
+        [self insertSubview:newMarkerView belowSubview:scrubber];
         [self.sponsorMarkerViews addObject:newMarkerView];
     }
 }
@@ -707,7 +710,7 @@ AVQueuePlayer *queuePlayer;
 %group JustSettings
 NSInteger pageStyle = 0;
 %hook YTRightNavigationButtons
-%property (strong, nonatomic) YTQTMButton *sponsorBlockButton;
+%property (retain, nonatomic) YTQTMButton *sponsorBlockButton;
 -(NSMutableArray *)buttons {
     NSMutableArray *retVal = %orig.mutableCopy;
     [self.sponsorBlockButton removeFromSuperview];
@@ -799,13 +802,13 @@ static void loadPrefs() {
 
 }
 
-static void prefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    loadPrefs();
-}
+%group LateLoad
 
-%ctor {
+%hook YTAppDelegate
+
+- (BOOL)application:(id)arg1 didFinishLaunchingWithOptions:(id)arg2 {
+    BOOL orig = %orig;
     loadPrefs();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)prefsChanged, CFSTR("com.galacticdev.isponsorblockprefs.changed"), NULL, CFNotificationSuspensionBehaviorCoalesce);
     if(kIsEnabled) {
         NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
         NSString *documentsDirectory = [paths objectAtIndex:0];
@@ -825,6 +828,20 @@ static void prefsChanged(CFNotificationCenterRef center, void *observer, CFStrin
         }
         %init(Main);
     }
+    return orig;
+}
+
+%end
+
+%end
+
+static void prefsChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    loadPrefs();
+}
+
+%ctor {
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)prefsChanged, CFSTR("com.galacticdev.isponsorblockprefs.changed"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    %init(LateLoad);
     %init(JustSettings);
 }
 
